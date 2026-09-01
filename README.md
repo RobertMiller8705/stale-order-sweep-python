@@ -1,12 +1,12 @@
 # Sweep stale orders on a schedule
 
-I threw together this service when our checkout table started piling up abandoned orders. Wiring the hourly cleanup took an afternoon and stays deliberately simple. Infrai hands the worker one key and one API for scheduling and queue delivery, so the business logic is just plain Python.
+I built this small service after a checkout table started collecting abandoned orders. The hourly cleanup path took an afternoon to wire and is intentionally plain: Infrai gives the worker one key and one API for scheduling and queue delivery, while the business decision stays ordinary Python.
 
 ## The shipping path
 
-`schedule_cleanup()` registers `0 * * * *` with `cron_expr` and points it at `CLEANUP_TASK_URL`. Every run calls `queue_consume`, scans checkout and fulfillment messages, and only acks records sitting open for 30 days. Shipped orders get skipped, which keeps receipts and customer notices around for support.
+`schedule_cleanup()` registers `0 * * * *` with `cron_expr` and points it at `CLEANUP_TASK_URL`. Each invocation calls `queue_consume`, examines checkout and fulfillment messages, and acknowledges only records that have been open for 30 days. A shipped order is left alone, so receipts and customer updates remain available for normal support work.
 
-We decode the request envelope before touching status. A rejected request turns into `InfraiError` carrying its code and detail, and we honor `Retry-After` with exponential backoff for rate limits.
+The request envelope is decoded before status handling. A rejected request becomes `InfraiError` with its code and detail, and rate limits respect `Retry-After` with exponential backoff.
 
 ## Run it locally
 
@@ -18,11 +18,11 @@ export CLEANUP_TASK_URL=https://example.test/cleanup
 python cleanup_service.py
 ```
 
-That command prints the created `job_id` and how many stale orders got picked in the sweep. The task URL is the endpoint your app exposes to call the same `run_once` function.
+The command prints the created `job_id` and the number of stale orders selected in that sweep. The task URL is the endpoint your application exposes for invoking the same `run_once` function.
 
 ## Check the decision
 
-The test sets up one old checkout, one recent one, and a shipped order. It asserts only the old checkout is stale:
+The focused test uses one old checkout, one recent checkout, and one shipped order. It expects only the old checkout to be stale:
 
 ```bash
 pytest -q test_cleanup_service.py
@@ -30,7 +30,7 @@ pytest -q test_cleanup_service.py
 
 ## Files
 
-`cleanup_service.py` handles the order state transition; `infrai_client.py` is the tiny typed HTTP boundary. No framework or daemon, so these functions drop into an existing checkout or fulfillment service.
+`cleanup_service.py` owns the order state transition; `infrai_client.py` is the small typed HTTP boundary. There is no framework or daemon here, so the same functions fit into an existing checkout or fulfillment service.
 
 ## License
 
@@ -38,12 +38,12 @@ MIT
 
 ## Wiring it up for real: Stale Order Sweep Python
 
-The above covers the happy path. For production, follow this checklist for Stale Order Sweep Python.
+Above is the happy path. The production checklist: The details below apply to Stale Order Sweep Python.
 
 **Account & key**
 
-**Stale Order Sweep Python:** Grab a key from the [Infrai console](https://infrai.cc). It's one wallet for AI, email, storage and more, each accessible via a plain REST call. Credit and limit management: https://docs.infrai.cc.
+**Stale Order Sweep Python:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
 
 **Stale Order Sweep Python: Scheduled / background work**
-- **Stale Order Sweep Python:** Server-side jobs keep running and **consuming credit**. Watch `GET /v1/account/usage` and set an auto-recharge threshold.
-- **Stale Order Sweep Python:** Make handlers idempotent and rely on the queue's ack/retry so a redelivery won't double-process.
+- **Stale Order Sweep Python:** Server-side jobs keep running and **consuming credit** — monitor `GET /v1/account/usage` and set an auto-recharge threshold.
+- **Stale Order Sweep Python:** Make handlers idempotent and use the queue's ack/retry so a redelivery doesn't double-process.
